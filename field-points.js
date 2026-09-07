@@ -41,6 +41,18 @@ let watchId = null, meMarker = null, meCircle = null, lastPos = null;
 /* ---------- сворачивание панели ---------- */
 const MIN_KEY = 'altay_sheet_min';
 
+/* Поле «Площадь» добавляем в форму на лету */
+function buildAreaField(){
+  const price = document.getElementById('fpPrice');
+  if(!price || document.getElementById('fpArea')) return;
+  const lab = document.createElement('label');
+  lab.textContent = 'Площадь, гектаров';
+  const inp = document.createElement('input');
+  inp.type = 'text'; inp.id = 'fpArea';
+  inp.placeholder = 'например 2,5 или 0,15 · можно не заполнять';
+  price.after(lab, inp);
+}
+
 function buildGrip(){
   const sheet = document.getElementById('fpSheet');
   if(!sheet || sheet.querySelector('.fpGrip')) return;
@@ -271,8 +283,19 @@ function fieldMarker(rec, pending){
       '<button class="del" onclick="hidePoint(\'' + rec['id'] + '\')">Убрать с карты</button></div>';
   }
   const sub = pending ? 'Полевая заметка · ещё не отправлена' : 'Полевая заметка';
+  const ha = parseFloat(String(rec['площадь']||'').replace(',','.'));
+  if(!isNaN(ha) && ha > 0){
+    rows.unshift(['Площадь', String(rec['площадь']).replace('.',',') + ' га']);
+    // круг по площади: радиус в метрах для круга той же площади
+    L.circle([parseFloat(rec['широта']), parseFloat(rec['долгота'])], {
+      radius: Math.sqrt(ha * 10000 / Math.PI),
+      color: color, weight: 2, fillColor: color,
+      fillOpacity: pending ? .08 : .16, dashArray: pending ? '5,5' : null
+    }).addTo(gField);
+  }
 
   return L.marker([parseFloat(rec['широта']), parseFloat(rec['долгота'])],{
+    zIndexOffset: 600,
     icon:L.divIcon({className:'',iconSize:[24,24],iconAnchor:[12,12],
       html:'<div style="width:24px;height:24px;border-radius:50%;background:'+color+
         ';border:3px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,.4);opacity:'+(pending?'.55':'1')+
@@ -394,7 +417,7 @@ function closeSheet(){
   stopPick();
   if(pickMarker){ map.removeLayer(pickMarker); pickMarker=null; }
   pickedLatLng = null; editId = null;
-  ['fpName','fpPrice','fpCheck','fpNote','fpAuthor'].forEach(id=>{
+  ['fpName','fpArea','fpPrice','fpCheck','fpNote','fpAuthor'].forEach(id=>{
     const el=document.getElementById(id); if(el) el.value='';
   });
   const h=document.querySelector('#fpSheet h3');
@@ -414,6 +437,8 @@ function editPoint(id){
 
   document.getElementById('fpName').value   = rec['название'] || '';
   document.getElementById('fpPrice').value  = rec['цена'] || '';
+  const fa = document.getElementById('fpArea');
+  if(fa) fa.value = String(rec['площадь']||'').replace('.',',');
   document.getElementById('fpCheck').value  = rec['что_проверить'] || '';
   document.getElementById('fpNote').value   = rec['комментарий'] || '';
   document.getElementById('fpAuthor').value = rec['автор'] || '';
@@ -458,6 +483,7 @@ async function saveField(){
     'широта': pickedLatLng.lat.toFixed(6),
     'долгота': pickedLatLng.lng.toFixed(6),
     'слой': document.querySelector('input[name=fpLayer]:checked').value,
+    'площадь': (document.getElementById('fpArea')||{value:''}).value.trim().replace(',','.'),
     'цена': document.getElementById('fpPrice').value.trim(),
     'статус': document.querySelector('input[name=fpStatus]:checked').value,
     'что_проверить': document.getElementById('fpCheck').value.trim(),
@@ -491,6 +517,7 @@ async function saveField(){
 /* ---------- запуск ---------- */
 function initFieldUI(){
   gField.addTo(map);          // без этого метки создаются, но не видны
+  buildAreaField();
   buildGrip();
   buildMobileUI();
   map.on('click', e => { if(pickMode) setPicked(e.latlng.lat, e.latlng.lng); });
