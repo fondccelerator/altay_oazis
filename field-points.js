@@ -1,7 +1,8 @@
 /* ============ ПОЛЕВЫЕ ЗАМЕТКИ ============
-   Точки, которые Ольга ставит прямо с телефона.
+   Точки, которые ставятся прямо с телефона.
    Хранятся в Google Таблице, адрес задан в config.js.
-   Если сети нет, запись ложится в память телефона и уходит сама, когда связь появится.
+   Нет сети — запись ложится в память телефона и уходит сама, когда связь появится.
+   Каждое изменение пишется в лист «журнал» той же таблицы.
    ========================================= */
 
 const FIELD_COLORS = {
@@ -10,8 +11,21 @@ const FIELD_COLORS = {
 };
 const QUEUE_KEY = 'altay_field_queue';
 const gField = L.layerGroup();
+const FIELD_INDEX = {};
 
-let pickMode = false, pickedLatLng = null, pickMarker = null;
+let pickMode = false, pickedLatLng = null, pickMarker = null, editId = null;
+
+/* ---------- стили кнопок в карточке ---------- */
+(function(){
+  const st = document.createElement('style');
+  st.textContent =
+    '.fpAct{display:flex;gap:6px;margin-top:10px;padding-top:9px;border-top:1px solid #DCE5DF}'+
+    '.fpAct button{flex:1;border:1px solid #DCE5DF;background:#fff;color:#1B3A2F;border-radius:7px;'+
+    'padding:7px 6px;font:600 12px/1 Arial;cursor:pointer}'+
+    '.fpAct button:hover{background:#EEF3F0}'+
+    '.fpAct .del{color:#9E2B25;border-color:#F0D8D6}';
+  document.head.appendChild(st);
+})();
 
 /* ---------- маркер ---------- */
 function fieldMarker(rec, pending){
@@ -27,7 +41,14 @@ function fieldMarker(rec, pending){
   if(rec['что_проверить']) rows.push(['Проверить', rec['что_проверить']]);
   if(rec['дата_записи'])   rows.push(['Записано', String(rec['дата_записи']).slice(0,10)]);
   if(rec['автор'])         rows.push(['Кто', rec['автор']]);
-  const note = rec['комментарий'] ? '<b>С выезда:</b><br>'+rec['комментарий'] : '';
+
+  let note = rec['комментарий'] ? '<b>С выезда:</b><br>'+rec['комментарий'] : '';
+  if(!pending && rec['id']){
+    FIELD_INDEX[rec['id']] = rec;
+    note += '<div class="fpAct">'+
+      '<button onclick="editPoint(\'' + rec['id'] + '\')">Изменить</button>'+
+      '<button class="del" onclick="hidePoint(\'' + rec['id'] + '\')">Убрать с карты</button></div>';
+  }
   const sub = pending ? 'Полевая заметка · ещё не отправлена' : 'Полевая заметка';
 
   return L.marker([parseFloat(rec['широта']), parseFloat(rec['долгота'])],{
@@ -39,7 +60,7 @@ function fieldMarker(rec, pending){
   }).bindPopup(pop(rec['название']||'Без названия', sub, rows, note),{maxWidth:330});
 }
 
-/* ---------- очередь ---------- */
+/* ---------- очередь на случай отсутствия сети ---------- */
 function queueGet(){ try{ return JSON.parse(localStorage.getItem(QUEUE_KEY)||'[]'); }catch(e){ return []; } }
 function queueSet(a){ try{ localStorage.setItem(QUEUE_KEY, JSON.stringify(a)); }catch(e){} }
 function queueAdd(rec){ const q=queueGet(); q.push(rec); queueSet(q); paintQueue(); }
@@ -51,7 +72,7 @@ function paintQueue(){
     b.style.display = q.length ? 'block' : 'none';
     b.textContent = 'Не отправлено: ' + q.length + '. Нажмите, чтобы попробовать снова';
   }
-  q.forEach(r => fieldMarker(r, true).addTo(gField));
+  q.forEach(r => { if(!r['действие'] || r['действие']==='создать') fieldMarker(r, true).addTo(gField); });
 }
 
 async function flushQueue(){
@@ -63,7 +84,7 @@ async function flushQueue(){
     if(!sent) left.push(rec);
   }
   queueSet(left);
-  if(left.length < q.length){ gField.clearLayers(); loadFieldPoints(); }
+  if(left.length < q.length) reloadPoints();
   paintQueue();
 }
 
@@ -77,6 +98,8 @@ async function sendOne(rec){
 }
 
 /* ---------- загрузка ---------- */
+function reloadPoints(){ setTimeout(()=>{ gField.clearLayers(); loadFieldPoints(); }, 1400); }
+
 function loadFieldPoints(){
   if(typeof FIELD_ENDPOINT === 'undefined' || !FIELD_ENDPOINT){
     setCount('адрес таблицы не задан'); paintQueue(); return;
@@ -134,16 +157,64 @@ function useGeo(){
 
 /* ---------- панель ---------- */
 function openSheet(){ document.getElementById('fpSheet').style.display='block'; }
+
 function closeSheet(){
   document.getElementById('fpSheet').style.display='none';
   stopPick();
   if(pickMarker){ map.removeLayer(pickMarker); pickMarker=null; }
-  pickedLatLng = null;
+  pickedLatLng = null; editId = null;
   ['fpName','fpPrice','fpCheck','fpNote','fpAuthor'].forEach(id=>{
     const el=document.getElementById(id); if(el) el.value='';
   });
+  const h=document.querySelector('#fpSheet h3');
+  if(h) h.textContent='Новая точка';
+  const b=document.getElementById('fpSave');
+  if(b) b.textContent='Сохранить точку';
 }
 
+/* ---------- правка существующей ---------- */
+function editPoint(id){
+  const rec = FIELD_INDEX[id];
+  if(!rec){ alert('Не нашёл эту точку, обновите страницу'); return; }
+
+  editId = id;
+  pickedLatLng = {lat: parseFloat(rec['широта']), lng: parseFloat(rec['долгота'])};
+  map.closePopup();
+
+  document.getElementById('fpName').value   = rec['название'] || '';
+  document.getElementById('fpPrice').value  = rec['цена'] || '';
+  document.getElementById('fpCheck').value  = rec['что_проверить'] || '';
+  document.getElementById('fpNote').value   = rec['комментарий'] || '';
+  document.getElementById('fpAuthor').value = rec['автор'] || '';
+  document.getElementById('fpCoords').textContent =
+    pickedLatLng.lat.toFixed(5) + ', ' + pickedLatLng.lng.toFixed(5);
+
+  const layer = String(rec['слой']||'Заметка');
+  document.querySelectorAll('input[name=fpLayer]').forEach(r=>{
+    r.checked = r.value.toLowerCase() === layer.toLowerCase();
+  });
+  const done = String(rec['статус']||'').toLowerCase().startsWith('провер');
+  document.querySelectorAll('input[name=fpStatus]').forEach(r=>{
+    r.checked = (r.value === 'проверено') === done;
+  });
+
+  document.querySelector('#fpSheet h3').textContent = 'Правка точки';
+  document.getElementById('fpSave').textContent = 'Сохранить изменения';
+  openSheet();
+}
+
+async function hidePoint(id){
+  const rec = FIELD_INDEX[id];
+  const name = rec ? (rec['название']||'точку') : 'точку';
+  if(!confirm('Убрать «'+name+'» с карты?\n\nСтрока останется в таблице, вернуть можно в любой момент.')) return;
+  map.closePopup();
+  const payload = {'действие':'скрыть','id':id,'автор':(rec&&rec['автор'])||''};
+  const sent = await sendOne(payload);
+  if(!sent) queueAdd(payload);
+  reloadPoints();
+}
+
+/* ---------- сохранение ---------- */
 async function saveField(){
   if(!pickedLatLng){ alert('Сначала укажите место: кнопка «Я сейчас здесь» или тап по карте'); return; }
   const name = document.getElementById('fpName').value.trim();
@@ -158,21 +229,20 @@ async function saveField(){
     'статус': document.querySelector('input[name=fpStatus]:checked').value,
     'что_проверить': document.getElementById('fpCheck').value.trim(),
     'комментарий': document.getElementById('fpNote').value.trim(),
-    'автор': document.getElementById('fpAuthor').value.trim(),
-    'дата_записи': new Date().toISOString()
+    'автор': document.getElementById('fpAuthor').value.trim()
   };
 
+  if(editId){ rec['действие'] = 'изменить'; rec['id'] = editId; }
+  else      { rec['дата_записи'] = new Date().toISOString(); }
+
   const btn = document.getElementById('fpSave');
+  const label = btn.textContent;
   btn.disabled = true; btn.textContent = 'Сохраняю…';
 
   const sent = await sendOne(rec);
-  if(sent){
-    setTimeout(()=>{ gField.clearLayers(); loadFieldPoints(); }, 1200);
-  } else {
-    queueAdd(rec);
-  }
+  if(sent) reloadPoints(); else queueAdd(rec);
 
-  btn.disabled = false; btn.textContent = 'Сохранить точку';
+  btn.disabled = false; btn.textContent = label;
   closeSheet();
 }
 
@@ -180,7 +250,8 @@ async function saveField(){
 function initFieldUI(){
   map.on('click', e => { if(pickMode) setPicked(e.latlng.lat, e.latlng.lng); });
   document.getElementById('fpAdd').addEventListener('click', () => {
-    if(pickedLatLng) openSheet(); else { openSheet(); document.getElementById('fpCoords').textContent='место не выбрано'; }
+    closeSheet(); openSheet();
+    document.getElementById('fpCoords').textContent='место не выбрано';
   });
   document.getElementById('fpGeo').addEventListener('click', useGeo);
   document.getElementById('fpPick').addEventListener('click', startPick);
