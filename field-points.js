@@ -78,6 +78,7 @@ function toggleMin(){
       'transform:translateY(-102%);transition:transform .22s ease;' +
       'box-shadow:0 6px 24px rgba(0,0,0,.28);border-bottom:1px solid #DCE5DF}' +
     '#side.fpOpen{transform:translateY(0)}' +
+    '#side.fpOpen #head{padding-top:54px}' +
     '#map{flex:1;height:100dvh}' +
     '.lyr{font-size:14px;padding:9px 8px;gap:11px}' +
     '.lyr input{width:19px;height:19px;margin-top:1px}' +
