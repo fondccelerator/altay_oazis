@@ -1,0 +1,21 @@
+/* Донастройка внешнего вида карты.
+   Файл маленький, правится отдельно от index.html. */
+
+/* Кнопки «Сохранить» и «Отмена» всегда на виду, без прокрутки формы */
+@media(max-width:980px){
+  .fpBtns{
+    position: sticky;
+    bottom: 0;
+    background: #fff;
+    padding: 10px 0 2px;
+    margin-top: 14px;
+    box-shadow: 0 -8px 12px -8px rgba(0,0,0,.18);
+  }
+}
+
+/* Телефон лёжа: заголовок формы компактнее, чтобы влезало больше полей */
+@media(max-width:980px) and (orientation:landscape){
+  #fpSheet h3{ font-size:16px; margin-bottom:1px }
+  #fpSheet .sub{ font-size:11px; margin-bottom:9px }
+  #fpCoords{ padding:7px 10px; font-size:12px }
+}
