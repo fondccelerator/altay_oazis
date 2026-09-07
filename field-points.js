@@ -68,6 +68,72 @@ function toggleMin(){
   paintGrip();
 }
 
+/* ---------- вид на телефоне ---------- */
+(function(){
+  const st = document.createElement('style');
+  st.textContent =
+  '@media(max-width:820px){' +
+    '#app{height:100dvh}' +
+    '#side{position:fixed;top:0;left:0;right:0;z-index:9000;max-height:82dvh;' +
+      'transform:translateY(-102%);transition:transform .22s ease;' +
+      'box-shadow:0 6px 24px rgba(0,0,0,.28);border-bottom:1px solid #DCE5DF}' +
+    '#side.fpOpen{transform:translateY(0)}' +
+    '#map{flex:1;height:100dvh}' +
+    '.lyr{font-size:14px;padding:9px 8px;gap:11px}' +
+    '.lyr input{width:19px;height:19px;margin-top:1px}' +
+    '.grp h2{font-size:12px}' +
+    '#head h1{font-size:17px}' +
+    '#head p{font-size:12px}' +
+    '.leaflet-top.leaflet-left{top:56px}' +
+    '.leaflet-popup-content{font-size:13.5px;line-height:1.5}' +
+    '.leaflet-popup-content-wrapper{border-radius:12px}' +
+    '.lg{display:none}' +
+    '.lg.fpOpen{display:block;right:10px;bottom:64px;max-width:70vw;font-size:12px}' +
+    '#fpSheet{max-height:84dvh;padding-bottom:34px}' +
+    '#fpSheet input[type=text],#fpSheet textarea{font-size:16px}' +
+    '.fpChips span{padding:11px 15px;font-size:14px}' +
+    '.fpPlace button{padding:14px 8px;font-size:14px}' +
+    '#fpSave,#fpClose{padding:16px;font-size:15px}' +
+  '}' +
+  '.fpTopBtn{position:fixed;z-index:9500;border:none;border-radius:22px;' +
+    'font:700 13px/1 Arial;box-shadow:0 2px 10px rgba(0,0,0,.28);cursor:pointer;padding:11px 15px}' +
+  '#fpLayersBtn{left:12px;top:12px;background:#fff;color:#1B3A2F;border:1px solid #DCE5DF}' +
+  '#fpLegendBtn{right:12px;bottom:12px;background:#fff;color:#6B8578;border:1px solid #DCE5DF;' +
+    'border-radius:50%;width:40px;height:40px;padding:0;font-size:16px}' +
+  '@media(min-width:821px){.fpTopBtn{display:none}}';
+  document.head.appendChild(st);
+})();
+
+function buildMobileUI(){
+  if(document.getElementById('fpLayersBtn')) return;
+  const side = document.getElementById('side');
+  const lg   = document.querySelector('.lg');
+
+  const b = document.createElement('button');
+  b.id = 'fpLayersBtn'; b.className = 'fpTopBtn'; b.textContent = 'Слои';
+  b.addEventListener('click', () => {
+    if(!side) return;
+    side.classList.toggle('fpOpen');
+    b.textContent = side.classList.contains('fpOpen') ? 'Закрыть' : 'Слои';
+  });
+  document.body.appendChild(b);
+
+  if(lg){
+    const l = document.createElement('button');
+    l.id = 'fpLegendBtn'; l.className = 'fpTopBtn'; l.textContent = 'i';
+    l.title = 'Легенда';
+    l.addEventListener('click', () => lg.classList.toggle('fpOpen'));
+    document.body.appendChild(l);
+  }
+
+  map.on('click', () => {
+    if(side && side.classList.contains('fpOpen')){
+      side.classList.remove('fpOpen');
+      b.textContent = 'Слои';
+    }
+  });
+}
+
 /* ---------- маркер ---------- */
 function fieldMarker(rec, pending){
   const key = String(rec['слой']||'заметка').trim().toLowerCase();
@@ -292,6 +358,7 @@ async function saveField(){
 /* ---------- запуск ---------- */
 function initFieldUI(){
   buildGrip();
+  buildMobileUI();
   map.on('click', e => { if(pickMode) setPicked(e.latlng.lat, e.latlng.lng); });
   document.getElementById('fpAdd').addEventListener('click', () => {
     closeSheet(); openSheet();
