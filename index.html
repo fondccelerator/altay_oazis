@@ -57,8 +57,7 @@
       <p>Oazis Estate · редакция 23 · слои достоверности<br>
       Координаты — по центрам населённых пунктов, не по кадастру.<br>Маркеры разделены по достоверности: ✓ проверено по документу · ? требует проверки.</p>
     </div>
-    <div id="fieldWarn" style="display:none;position:fixed;bottom:12px;left:12px;z-index:9999;max-width:420px;background:#FBE9E8;color:#9E2B25;border-left:4px solid #9E2B25;padding:10px 12px;font:12px/1.45 Arial;box-shadow:0 2px 10px rgba(0,0,0,.2)"></div>
-<div id="panel"></div>
+    <div id="panel"></div>
   </aside>
   <div id="map"></div>
 </div>
@@ -79,6 +78,8 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="config.js"></script>
+<script src="field-points.js"></script>
 <script>
 const map = L.map('map',{zoomControl:true,scrollWheelZoom:true}).setView([51.35,86.20],8);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:17,attribution:'&copy; OpenStreetMap'}).addTo(map);
@@ -620,107 +621,11 @@ const groups=[
    {l:'? Требует проверки',g:gRisk,c:ACC,n:risks.length},
  ]},
  {t:'Полевые заметки',items:[
-   {l:'Точки с выезда (points.csv)',g:gField,c:'#C9A227',n:'<span id="fieldCount">…</span>'},
+   {l:'Точки с выезда',g:(typeof gField!=='undefined'?gField:L.layerGroup()),c:'#C9A227',n:'<span id="fieldCount">…</span>'},
  ]},
 ];
-
-/* ================= ПОЛЕВЫЕ ЗАМЕТКИ: points.csv =================
-   Файл points.csv лежит рядом с index.html и правится через сайт GitHub.
-   Одна строка = одна точка. Разделитель — точка с запятой.
-   Битая строка не ломает карту: она пропускается, счётчик её покажет.
-================================================================= */
-const gField = L.layerGroup();
-
-const FIELD_COLORS = {
-  'земля':      '#C9A227',
-  'объект':     '#1B3A2F',
-  'застройщик': '#2E5545',
-  'риск':       '#9E2B25',
-  'заметка':    '#6B8578'
-};
-
-function fieldMarker(rec){
-  const key   = (rec['слой']||'заметка').trim().toLowerCase();
-  const color = FIELD_COLORS[key] || FIELD_COLORS['заметка'];
-  const done  = (rec['статус']||'').trim().toLowerCase().startsWith('провер');
-  const rows  = [];
-  if(rec['цена'])          rows.push(['Цена', rec['цена']]);
-  if(rec['слой'])          rows.push(['Слой', rec['слой']]);
-  if(rec['статус'])        rows.push(['Статус', done ? '<b style="color:#1B6B3A">проверено</b>'
-                                                     : '<b style="color:#C2632F">требует проверки</b>']);
-  if(rec['что_проверить']) rows.push(['Проверить', rec['что_проверить']]);
-  if(rec['дата'])          rows.push(['Дата записи', rec['дата']]);
-
-  const note = rec['комментарий']
-    ? '<b>Заметка с выезда:</b><br>' + rec['комментарий']
-    : '';
-
-  return L.marker([parseFloat(rec['широта']), parseFloat(rec['долгота'])], {
-    icon: L.divIcon({
-      className:'', iconSize:[22,22], iconAnchor:[11,11],
-      html:'<div style="width:22px;height:22px;border-radius:50%;background:'+color+
-           ';border:3px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,.4);'+
-           'display:flex;align-items:center;justify-content:center;'+
-           'color:#fff;font:700 11px/1 Arial">'+(done?'✓':'!')+'</div>'
-    })
-  }).bindPopup(pop(rec['название']||'Без названия', 'Полевая заметка', rows, note), {maxWidth:330});
-}
-
-function parseCsvLine(line){
-  // точка с запятой как разделитель; кавычки не обязательны
-  return line.split(';').map(s=>s.trim().replace(/^"|"$/g,''));
-}
-
-function loadFieldPoints(){
-  fetch('points.csv?v=' + Date.now())
-    .then(r => { if(!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
-    .then(text => {
-      const lines = text.split(/\r?\n/).filter(l => l.trim() !== '');
-      if(lines.length < 2){ updateFieldCount(0,0); return; }
-      const head = parseCsvLine(lines[0]).map(h => h.toLowerCase());
-      let ok = 0, bad = 0;
-      const problems = [];
-      for(let i = 1; i < lines.length; i++){
-        try{
-          const cells = parseCsvLine(lines[i]);
-          const rec = {};
-          head.forEach((h, j) => rec[h] = cells[j] || '');
-          const la = parseFloat(String(rec['широта']).replace(',', '.'));
-          const lo = parseFloat(String(rec['долгота']).replace(',', '.'));
-          if(isNaN(la) || isNaN(lo) || la < 48 || la > 55 || lo < 82 || lo > 90){
-            throw new Error('координаты вне Алтая или не число');
-          }
-          rec['широта'] = la; rec['долгота'] = lo;
-          fieldMarker(rec).addTo(gField);
-          ok++;
-        }catch(e){
-          bad++;
-          problems.push('строка ' + (i + 1) + ': ' + e.message);
-        }
-      }
-      updateFieldCount(ok, bad, problems);
-    })
-    .catch(e => updateFieldCount(0, 0, ['файл points.csv не загрузился: ' + e.message]));
-}
-
-function updateFieldCount(ok, bad, problems){
-  const el = document.getElementById('fieldCount');
-  if(el) el.textContent = ok + (bad ? ' · ' + bad + ' с ошибкой' : '');
-  const w = document.getElementById('fieldWarn');
-  if(w){
-    if(bad || (problems && problems.length && !ok)){
-      w.style.display = 'block';
-      w.innerHTML = 'Не удалось прочитать: ' + (problems || []).join('; ');
-    } else {
-      w.style.display = 'none';
-    }
-  }
-}
-
-loadFieldPoints();
-
-
 const panel=document.getElementById('panel');
+try{
 groups.forEach(gr=>{
   const d=document.createElement('div'); d.className='grp';
   d.innerHTML='<h2>'+gr.t+'</h2>';
@@ -738,6 +643,96 @@ nt.innerHTML='<b>Как читать.</b> Ромбы — районы, цвет 
  '<b>Знак *</b> — цифра не заверена первоисточником.<br><br>'+
  '<b>Контур КРТ нарисован ориентировочно.</b> В распоряжении 6 352 точки границ в системе МСК-04 — для точной привязки нужен пересчёт кадастровым инженером.';
 panel.appendChild(nt);
+}catch(err){ console.error('панель слоёв не построилась:',err); }
 </script>
+<!-- ПОЛЕВЫЕ ЗАМЕТКИ: кнопка, подсказка, панель ввода -->
+<style>
+#fpAdd{position:fixed;right:16px;bottom:16px;z-index:10000;background:#C2632F;color:#fff;
+ border:none;border-radius:30px;padding:15px 22px;font:700 15px/1 Arial;box-shadow:0 3px 14px rgba(0,0,0,.35);cursor:pointer}
+#fpAdd:active{transform:scale(.97)}
+#fpHint{display:none;position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:10001;
+ background:#1B3A2F;color:#fff;padding:11px 18px;border-radius:24px;font:600 14px/1 Arial;box-shadow:0 3px 14px rgba(0,0,0,.35)}
+#fpQueue{display:none;position:fixed;left:12px;bottom:12px;z-index:10000;background:#FBF0E8;color:#C2632F;
+ border-left:4px solid #C2632F;padding:9px 13px;font:600 12px/1.4 Arial;cursor:pointer;max-width:250px}
+#fpSheet{display:none;position:fixed;left:0;right:0;bottom:0;z-index:10002;background:#fff;
+ border-radius:18px 18px 0 0;box-shadow:0 -4px 24px rgba(0,0,0,.3);max-height:88vh;overflow-y:auto;
+ padding:18px 18px 26px;font-family:Arial}
+@media(min-width:760px){#fpSheet{left:auto;right:16px;bottom:16px;width:420px;border-radius:14px}}
+#fpSheet h3{margin:0 0 3px;font:700 18px/1.2 Georgia,serif;color:#1B3A2F}
+#fpSheet .sub{color:#6B8578;font-size:12px;margin-bottom:14px}
+#fpSheet label{display:block;font:600 12px/1 Arial;color:#6B8578;margin:12px 0 5px}
+#fpSheet input[type=text],#fpSheet textarea{width:100%;box-sizing:border-box;border:1px solid #DCE5DF;
+ border-radius:9px;padding:11px 12px;font:15px Arial;color:#222;background:#fff}
+#fpSheet textarea{min-height:78px;resize:vertical}
+#fpSheet input:focus,#fpSheet textarea:focus{outline:none;border-color:#C2632F}
+.fpChips{display:flex;flex-wrap:wrap;gap:7px}
+.fpChips label{margin:0;cursor:pointer}
+.fpChips input{position:absolute;opacity:0;pointer-events:none}
+.fpChips span{display:inline-block;padding:9px 14px;border:1px solid #DCE5DF;border-radius:20px;
+ font:600 13px/1 Arial;color:#6B8578;background:#fff}
+.fpChips input:checked+span{background:#1B3A2F;border-color:#1B3A2F;color:#fff}
+.fpPlace{display:flex;gap:8px;margin-bottom:4px}
+.fpPlace button{flex:1;border:1px solid #C2632F;background:#fff;color:#C2632F;border-radius:9px;
+ padding:12px 8px;font:700 13px/1.2 Arial;cursor:pointer}
+.fpPlace button:active{background:#FBF0E8}
+#fpCoords{font:700 13px/1 Arial;color:#1B3A2F;background:#EEF3F0;padding:9px 12px;border-radius:8px;margin-top:8px}
+#fpGeoState{font:12px Arial;color:#C2632F;min-height:15px;margin-top:5px}
+.fpBtns{display:flex;gap:9px;margin-top:18px}
+#fpSave{flex:2;background:#1B3A2F;color:#fff;border:none;border-radius:10px;padding:15px;font:700 15px/1 Arial;cursor:pointer}
+#fpClose{flex:1;background:#fff;color:#6B8578;border:1px solid #DCE5DF;border-radius:10px;padding:15px;font:600 14px/1 Arial;cursor:pointer}
+#fpSave:disabled{opacity:.6}
+</style>
+
+<button id="fpAdd">+ Добавить точку</button>
+<div id="fpHint">Ткните в карту, где стоит объект</div>
+<div id="fpQueue"></div>
+
+<div id="fpSheet">
+  <h3>Новая точка</h3>
+  <div class="sub">Обязательны только название и место. Остальное можно дозаполнить позже.</div>
+
+  <label>Где это</label>
+  <div class="fpPlace">
+    <button type="button" id="fpGeo">Я сейчас здесь</button>
+    <button type="button" id="fpPick">Ткнуть в карту</button>
+  </div>
+  <div id="fpGeoState"></div>
+  <div id="fpCoords">место не выбрано</div>
+
+  <label>Название</label>
+  <input type="text" id="fpName" placeholder="Например: база у Артыбаша">
+
+  <label>Что это</label>
+  <div class="fpChips">
+    <label><input type="radio" name="fpLayer" value="Земля" checked><span>Земля</span></label>
+    <label><input type="radio" name="fpLayer" value="Объект"><span>Объект</span></label>
+    <label><input type="radio" name="fpLayer" value="Застройщик"><span>Застройщик</span></label>
+    <label><input type="radio" name="fpLayer" value="Риск"><span>Риск</span></label>
+    <label><input type="radio" name="fpLayer" value="Заметка"><span>Заметка</span></label>
+  </div>
+
+  <label>Цена, как назвал продавец</label>
+  <input type="text" id="fpPrice" placeholder="12 млн ₽ или по запросу">
+
+  <label>Насколько верим</label>
+  <div class="fpChips">
+    <label><input type="radio" name="fpStatus" value="требует проверки" checked><span>требует проверки</span></label>
+    <label><input type="radio" name="fpStatus" value="проверено"><span>проверено</span></label>
+  </div>
+
+  <label>Что осталось выяснить</label>
+  <input type="text" id="fpCheck" placeholder="есть ли в списке под снос">
+
+  <label>Что увидели своими глазами</label>
+  <textarea id="fpNote" placeholder="Можно надиктовать голосом. Дорога грунтовая, до воды метров сорок, хозяин на связи…"></textarea>
+
+  <label>Кто записал</label>
+  <input type="text" id="fpAuthor" placeholder="Ольга">
+
+  <div class="fpBtns">
+    <button id="fpSave">Сохранить точку</button>
+    <button id="fpClose">Отмена</button>
+  </div>
+</div>
 </body>
 </html>
