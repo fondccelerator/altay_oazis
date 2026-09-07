@@ -78,8 +78,17 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-<script src="config.js"></script>
-<script src="field-points.js"></script>
+<script>
+/* Подключаем свои файлы с меткой времени, чтобы браузер не отдавал старую копию
+   из кэша после обновления. Метка меняется раз в минуту. */
+(function(){
+  var v = '?v=' + Math.floor(Date.now() / 60000);
+  document.write('<link rel="stylesheet" href="custom.css' + v + '">');
+  ['config.js', 'field-points.js'].forEach(function(f){
+    document.write('<scr' + 'ipt src="' + f + v + '"><\/scr' + 'ipt>');
+  });
+})();
+</script>
 <script>
 const map = L.map('map',{zoomControl:true,scrollWheelZoom:true}).setView([51.35,86.20],8);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:17,attribution:'&copy; OpenStreetMap'}).addTo(map);
