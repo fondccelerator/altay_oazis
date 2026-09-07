@@ -1,5 +1,5 @@
 /* Адрес Google Таблицы, куда карта пишет и откуда читает полевые точки.
-   Получается так: Таблица → Расширения → Apps Script → вставить AppsScript_Code.gs
-   → Deploy → New deployment → Web app → Execute as: Me, Who has access: Anyone.
-   Скопированную ссылку вида https://script.google.com/macros/s/.../exec вставить ниже. */
-const FIELD_ENDPOINT = '';
+   Таблица живёт на аккаунте fond.ccelerator@gmail.com.
+   Если адрес когда-нибудь поменяется: Таблица → Расширения → Apps Script →
+   Deploy → Manage deployments → скопировать ссылку, заканчивающуюся на /exec. */
+const FIELD_ENDPOINT = 'https://script.google.com/macros/s/AKfycbwZIWt0pmWCdduvlPzPeIdjnrpdI7gI22fxT1bxFYXltpTOJSOhyfZpKZIf7gKWkxlM/exec';
