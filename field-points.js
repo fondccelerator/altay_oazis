@@ -14,8 +14,9 @@ const gField = L.layerGroup();
 const FIELD_INDEX = {};
 
 let pickMode = false, pickedLatLng = null, pickMarker = null, editId = null;
+let watchId = null, meMarker = null, meCircle = null, lastPos = null;
 
-/* ---------- стили ---------- */
+/* ---------- стили кнопок в карточке ---------- */
 (function(){
   const st = document.createElement('style');
   st.textContent =
@@ -24,13 +25,11 @@ let pickMode = false, pickedLatLng = null, pickMarker = null, editId = null;
     'padding:7px 6px;font:600 12px/1 Arial;cursor:pointer}'+
     '.fpAct button:hover{background:#EEF3F0}'+
     '.fpAct .del{color:#9E2B25;border-color:#F0D8D6}'+
-    /* ручка сворачивания */
     '.fpGrip{display:flex;align-items:center;justify-content:center;gap:9px;'+
     'margin:-8px -18px 10px;padding:9px;cursor:pointer;user-select:none;'+
     'border-bottom:1px solid #EEF3F0}'+
     '.fpGrip i{display:block;width:40px;height:4px;border-radius:3px;background:#DCE5DF}'+
     '.fpGrip b{font:600 11px/1 Arial;color:#6B8578}'+
-    /* свёрнутый вид: только заголовок, координаты и кнопки */
     '#fpSheet.fpMin{max-height:none}'+
     '#fpSheet.fpMin label,#fpSheet.fpMin input[type=text],#fpSheet.fpMin textarea,'+
     '#fpSheet.fpMin .fpChips,#fpSheet.fpMin .fpPlace,#fpSheet.fpMin #fpGeoState,'+
@@ -101,7 +100,28 @@ function toggleMin(){
   '#fpLayersBtn{left:12px;top:12px;background:#fff;color:#1B3A2F;border:1px solid #DCE5DF}' +
   '#fpLegendBtn{right:12px;bottom:12px;background:#fff;color:#6B8578;border:1px solid #DCE5DF;' +
     'border-radius:50%;width:40px;height:40px;padding:0;font-size:16px}' +
-  '@media(min-width:821px){.fpTopBtn{display:none}}';
+  '@media(min-width:821px){.fpTopBtn{display:none}}' +
+  '#fpGeoBtn{right:12px;bottom:62px;background:#fff;color:#1B3A2F;border:1px solid #DCE5DF;' +
+    'border-radius:50%;width:40px;height:40px;padding:0;font-size:17px;line-height:1}' +
+  '#fpGeoBtn.on{background:#1B3A2F;color:#fff;border-color:#1B3A2F}' +
+  '.meDot{width:16px;height:16px;border-radius:50%;background:#1E6FD9;border:3px solid #fff;' +
+    'box-shadow:0 0 0 2px rgba(30,111,217,.35),0 1px 5px rgba(0,0,0,.4)}' +
+  '@media(max-width:980px) and (orientation:landscape){' +
+    '#fpSheet{left:auto;right:0;top:0;bottom:0;width:54vw;max-width:430px;max-height:100dvh;' +
+      'border-radius:14px 0 0 14px;padding:14px 16px 18px;overflow-y:auto}' +
+    '#fpSheet.fpMin{top:auto;bottom:0;height:auto}' +
+    '.fpGrip{margin:-6px -16px 8px}' +
+    '#side{width:62vw;max-width:440px;right:auto;max-height:100dvh;' +
+      'transform:translateX(-102%);transition:transform .22s ease}' +
+    '#side.fpOpen{transform:translateX(0)}' +
+    '#side.fpOpen #head{padding-top:15px}' +
+    '#fpAdd{padding:9px 13px;font-size:13px}' +
+    '#fpSheet label{margin:9px 0 4px}' +
+    '#fpSheet textarea{min-height:56px}' +
+    '.fpBtns{margin-top:12px}' +
+    '#fpSave,#fpClose{padding:12px;font-size:14px}' +
+    '#fpHint{top:auto;bottom:12px}' +
+  '}';
   document.head.appendChild(st);
 })();
 
@@ -127,12 +147,67 @@ function buildMobileUI(){
     document.body.appendChild(l);
   }
 
+  const geo = document.createElement('button');
+  geo.id = 'fpGeoBtn'; geo.className = 'fpTopBtn'; geo.textContent = '◎';
+  geo.title = 'Показывать, где я';
+  geo.addEventListener('click', toggleWatch);
+  document.body.appendChild(geo);
+
+  // тап по карте закрывает шторку со слоями
   map.on('click', () => {
     if(side && side.classList.contains('fpOpen')){
       side.classList.remove('fpOpen');
       b.textContent = 'Слои';
     }
   });
+}
+
+/* ---------- слежение за своим положением ---------- */
+function drawMe(pos){
+  lastPos = pos;
+  const ll = [pos.coords.latitude, pos.coords.longitude];
+  const acc = pos.coords.accuracy || 0;
+
+  if(!meMarker){
+    meMarker = L.marker(ll, {zIndexOffset:1000, icon:L.divIcon({className:'', iconSize:[16,16],
+      iconAnchor:[8,8], html:'<div class="meDot"></div>'})}).addTo(map);
+    meCircle = L.circle(ll, {radius:acc, color:'#1E6FD9', weight:1, fillColor:'#1E6FD9',
+      fillOpacity:.10}).addTo(map);
+  } else {
+    meMarker.setLatLng(ll);
+    meCircle.setLatLng(ll).setRadius(acc);
+  }
+  meMarker.bindPopup('Вы здесь<br>Точность около ' + Math.round(acc) + ' м' +
+    '<div class="fpAct"><button onclick="addHere()">Поставить точку здесь</button></div>');
+}
+
+function toggleWatch(){
+  const btn = document.getElementById('fpGeoBtn');
+  if(watchId !== null){
+    navigator.geolocation.clearWatch(watchId);
+    watchId = null;
+    if(meMarker){ map.removeLayer(meMarker); meMarker = null; }
+    if(meCircle){ map.removeLayer(meCircle); meCircle = null; }
+    btn.classList.remove('on');
+    return;
+  }
+  if(!navigator.geolocation){ alert('Телефон не отдаёт координаты'); return; }
+  btn.classList.add('on');
+  let first = true;
+  watchId = navigator.geolocation.watchPosition(
+    pos => { drawMe(pos); if(first){ map.setView([pos.coords.latitude,pos.coords.longitude], 14); first = false; } },
+    err => { btn.classList.remove('on'); watchId = null;
+             alert('Не получилось определить место. Проверьте, разрешён ли доступ к геолокации.'); },
+    {enableHighAccuracy:true, maximumAge:5000, timeout:15000}
+  );
+}
+
+/* поставить точку в текущем положении */
+function addHere(){
+  if(!lastPos){ useGeo(); return; }
+  map.closePopup();
+  closeSheet();
+  setPicked(lastPos.coords.latitude, lastPos.coords.longitude);
 }
 
 /* ---------- маркер ---------- */
@@ -206,23 +281,33 @@ async function sendOne(rec){
 }
 
 /* ---------- загрузка ---------- */
-function reloadPoints(){ setTimeout(()=>{ gField.clearLayers(); loadFieldPoints(); }, 1400); }
+function reloadPoints(expect){
+  // Apps Script записывает не мгновенно, поэтому опрашиваем несколько раз
+  const tries = [1200, 2500, 4000, 7000];
+  tries.forEach((ms, i) => setTimeout(() => {
+    gField.clearLayers();
+    loadFieldPoints(i === tries.length - 1 ? null : expect);
+  }, ms));
+}
 
-function loadFieldPoints(){
+function loadFieldPoints(expect){
   if(typeof FIELD_ENDPOINT === 'undefined' || !FIELD_ENDPOINT){
     setCount('адрес таблицы не задан'); paintQueue(); return;
   }
   fetch(FIELD_ENDPOINT + '?t=' + Date.now())
     .then(r => r.json())
     .then(d => {
-      let ok = 0;
+      let ok = 0, found = false;
       (d.points||[]).forEach(rec => {
         const la = parseFloat(String(rec['широта']).replace(',','.'));
         const lo = parseFloat(String(rec['долгота']).replace(',','.'));
         if(isNaN(la)||isNaN(lo)||la<48||la>55||lo<82||lo>90) return;
         rec['широта']=la; rec['долгота']=lo;
         fieldMarker(rec).addTo(gField); ok++;
+        if(expect && rec['название'] === expect['название']) found = true;
       });
+      // точка ещё не доехала до таблицы — показываем её сразу, серой
+      if(expect && !found){ fieldMarker(expect, true).addTo(gField); ok++; }
       setCount(ok); paintQueue();
     })
     .catch(() => { setCount('таблица недоступна'); paintQueue(); });
@@ -350,7 +435,16 @@ async function saveField(){
   btn.disabled = true; btn.textContent = 'Сохраняю…';
 
   const sent = await sendOne(rec);
-  if(sent) reloadPoints(); else queueAdd(rec);
+  if(sent){
+    if(!editId){
+      // рисуем сразу, не дожидаясь ответа таблицы
+      fieldMarker(rec, true).addTo(gField);
+      map.setView([parseFloat(rec['широта']), parseFloat(rec['долгота'])], Math.max(map.getZoom(), 12));
+    }
+    reloadPoints(editId ? null : rec);
+  } else {
+    queueAdd(rec);
+  }
 
   btn.disabled = false; btn.textContent = label;
   closeSheet();
