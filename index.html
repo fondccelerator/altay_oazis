@@ -647,16 +647,17 @@ panel.appendChild(nt);
 </script>
 <!-- ПОЛЕВЫЕ ЗАМЕТКИ: кнопка, подсказка, панель ввода -->
 <style>
-#fpAdd{position:fixed;right:16px;bottom:16px;z-index:10000;background:#C2632F;color:#fff;
+#fpAdd{position:fixed;right:16px;top:16px;z-index:10000;background:#C2632F;color:#fff;
  border:none;border-radius:30px;padding:15px 22px;font:700 15px/1 Arial;box-shadow:0 3px 14px rgba(0,0,0,.35);cursor:pointer}
 #fpAdd:active{transform:scale(.97)}
-#fpHint{display:none;position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:10001;
+#fpHint{display:none;position:fixed;top:74px;left:50%;transform:translateX(-50%);z-index:10001;
  background:#1B3A2F;color:#fff;padding:11px 18px;border-radius:24px;font:600 14px/1 Arial;box-shadow:0 3px 14px rgba(0,0,0,.35)}
 #fpQueue{display:none;position:fixed;left:12px;bottom:12px;z-index:10000;background:#FBF0E8;color:#C2632F;
  border-left:4px solid #C2632F;padding:9px 13px;font:600 12px/1.4 Arial;cursor:pointer;max-width:250px}
 #fpSheet{display:none;position:fixed;left:0;right:0;bottom:0;z-index:10002;background:#fff;
  border-radius:18px 18px 0 0;box-shadow:0 -4px 24px rgba(0,0,0,.3);max-height:88vh;overflow-y:auto;
  padding:18px 18px 26px;font-family:Arial}
+@media(max-width:759px){#fpAdd{padding:12px 16px;font-size:14px;right:10px;top:10px}}
 @media(min-width:760px){#fpSheet{left:auto;right:16px;bottom:16px;width:420px;border-radius:14px}}
 #fpSheet h3{margin:0 0 3px;font:700 18px/1.2 Georgia,serif;color:#1B3A2F}
 #fpSheet .sub{color:#6B8578;font-size:12px;margin-bottom:14px}
