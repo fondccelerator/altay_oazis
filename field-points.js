@@ -181,6 +181,37 @@ function drawMe(pos){
     '<div class="fpAct"><button onclick="addHere()">Поставить точку здесь</button></div>');
 }
 
+/* Подсказка, если доступ к геолокации закрыт наглухо */
+function geoHelp(){
+  const ios = /iPad|iPhone|iPod/.test(navigator.userAgent);
+  return ios
+    ? 'Доступ к геопозиции закрыт.\n\nВ Safari нажмите «аА» слева в адресной строке → ' +
+      '«Настройки для этого веб-сайта» → Геопозиция → Разрешить.\n\n' +
+      'Если пункта нет: Настройки телефона → Safari → Геопозиция → Спрашивать или Разрешить.'
+    : 'Доступ к геопозиции закрыт.\n\nНажмите на замок слева в адресной строке → ' +
+      'Разрешения → Геоданные → Разрешить. Потом обновите страницу.\n\n' +
+      'Ещё проверьте, включена ли геолокация в самом телефоне.';
+}
+
+/* Единая точка запроса координат: сама вызывает окно разрешения */
+function askGeo(onOk, onFail){
+  if(!navigator.geolocation){
+    alert('Этот браузер не умеет определять место. Поставьте точку тапом по карте.');
+    if(onFail) onFail();
+    return;
+  }
+  navigator.geolocation.getCurrentPosition(
+    onOk,
+    err => {
+      if(err && err.code === 1) alert(geoHelp());
+      else if(err && err.code === 3) alert('Не удалось поймать спутники. В помещении это обычное дело, попробуйте на улице или поставьте точку тапом по карте.');
+      else alert('Место определить не вышло. Поставьте точку тапом по карте.');
+      if(onFail) onFail(err);
+    },
+    {enableHighAccuracy:true, timeout:15000, maximumAge:10000}
+  );
+}
+
 function toggleWatch(){
   const btn = document.getElementById('fpGeoBtn');
   if(watchId !== null){
@@ -191,14 +222,21 @@ function toggleWatch(){
     btn.classList.remove('on');
     return;
   }
-  if(!navigator.geolocation){ alert('Телефон не отдаёт координаты'); return; }
-  btn.classList.add('on');
-  let first = true;
-  watchId = navigator.geolocation.watchPosition(
-    pos => { drawMe(pos); if(first){ map.setView([pos.coords.latitude,pos.coords.longitude], 14); first = false; } },
-    err => { btn.classList.remove('on'); watchId = null;
-             alert('Не получилось определить место. Проверьте, разрешён ли доступ к геолокации.'); },
-    {enableHighAccuracy:true, maximumAge:5000, timeout:15000}
+  // сперва один обычный запрос: именно он показывает окно разрешения
+  askGeo(
+    pos => {
+      drawMe(pos);
+      map.setView([pos.coords.latitude, pos.coords.longitude], 15);
+      btn.classList.add('on');
+      watchId = navigator.geolocation.watchPosition(
+        drawMe,
+        err => { if(err && err.code === 1){ alert(geoHelp()); }
+                 btn.classList.remove('on');
+                 if(watchId !== null){ navigator.geolocation.clearWatch(watchId); watchId = null; } },
+        {enableHighAccuracy:true, maximumAge:5000, timeout:20000}
+      );
+    },
+    () => { btn.classList.remove('on'); }
   );
 }
 
@@ -336,15 +374,15 @@ function setPicked(la, lo){
   document.getElementById('fpCoords').textContent = la.toFixed(5) + ', ' + lo.toFixed(5);
   openSheet();
 }
+
 function useGeo(){
   const s = document.getElementById('fpGeoState');
-  if(!navigator.geolocation){ s.textContent = 'телефон не отдаёт координаты'; return; }
   s.textContent = 'определяю…';
-  navigator.geolocation.getCurrentPosition(
-    p => { s.textContent=''; map.setView([p.coords.latitude,p.coords.longitude],14);
+  askGeo(
+    p => { s.textContent = 'точность около ' + Math.round(p.coords.accuracy) + ' м';
+           map.setView([p.coords.latitude, p.coords.longitude], 15);
            setPicked(p.coords.latitude, p.coords.longitude); },
-    () => { s.textContent = 'не получилось, ткните в карту'; },
-    {enableHighAccuracy:true, timeout:10000}
+    () => { s.textContent = 'не получилось, ткните в карту'; }
   );
 }
 
@@ -452,6 +490,7 @@ async function saveField(){
 
 /* ---------- запуск ---------- */
 function initFieldUI(){
+  gField.addTo(map);          // без этого метки создаются, но не видны
   buildGrip();
   buildMobileUI();
   map.on('click', e => { if(pickMode) setPicked(e.latlng.lat, e.latlng.lng); });
