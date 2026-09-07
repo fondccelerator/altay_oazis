@@ -15,7 +15,7 @@ const FIELD_INDEX = {};
 
 let pickMode = false, pickedLatLng = null, pickMarker = null, editId = null;
 
-/* ---------- стили кнопок в карточке ---------- */
+/* ---------- стили ---------- */
 (function(){
   const st = document.createElement('style');
   st.textContent =
@@ -23,9 +23,50 @@ let pickMode = false, pickedLatLng = null, pickMarker = null, editId = null;
     '.fpAct button{flex:1;border:1px solid #DCE5DF;background:#fff;color:#1B3A2F;border-radius:7px;'+
     'padding:7px 6px;font:600 12px/1 Arial;cursor:pointer}'+
     '.fpAct button:hover{background:#EEF3F0}'+
-    '.fpAct .del{color:#9E2B25;border-color:#F0D8D6}';
+    '.fpAct .del{color:#9E2B25;border-color:#F0D8D6}'+
+    /* ручка сворачивания */
+    '.fpGrip{display:flex;align-items:center;justify-content:center;gap:9px;'+
+    'margin:-8px -18px 10px;padding:9px;cursor:pointer;user-select:none;'+
+    'border-bottom:1px solid #EEF3F0}'+
+    '.fpGrip i{display:block;width:40px;height:4px;border-radius:3px;background:#DCE5DF}'+
+    '.fpGrip b{font:600 11px/1 Arial;color:#6B8578}'+
+    /* свёрнутый вид: только заголовок, координаты и кнопки */
+    '#fpSheet.fpMin{max-height:none}'+
+    '#fpSheet.fpMin label,#fpSheet.fpMin input[type=text],#fpSheet.fpMin textarea,'+
+    '#fpSheet.fpMin .fpChips,#fpSheet.fpMin .fpPlace,#fpSheet.fpMin #fpGeoState,'+
+    '#fpSheet.fpMin .sub{display:none}'+
+    '#fpSheet.fpMin #fpCoords{margin-top:0}';
   document.head.appendChild(st);
 })();
+
+/* ---------- сворачивание панели ---------- */
+const MIN_KEY = 'altay_sheet_min';
+
+function buildGrip(){
+  const sheet = document.getElementById('fpSheet');
+  if(!sheet || sheet.querySelector('.fpGrip')) return;
+  const g = document.createElement('div');
+  g.className = 'fpGrip';
+  g.innerHTML = '<i></i><b></b>';
+  g.addEventListener('click', toggleMin);
+  sheet.insertBefore(g, sheet.firstChild);
+  if(localStorage.getItem(MIN_KEY) === '1') sheet.classList.add('fpMin');
+  paintGrip();
+}
+
+function paintGrip(){
+  const sheet = document.getElementById('fpSheet');
+  const b = sheet && sheet.querySelector('.fpGrip b');
+  if(!b) return;
+  b.textContent = sheet.classList.contains('fpMin') ? 'развернуть' : 'свернуть';
+}
+
+function toggleMin(){
+  const sheet = document.getElementById('fpSheet');
+  sheet.classList.toggle('fpMin');
+  try{ localStorage.setItem(MIN_KEY, sheet.classList.contains('fpMin') ? '1' : '0'); }catch(e){}
+  paintGrip();
+}
 
 /* ---------- маркер ---------- */
 function fieldMarker(rec, pending){
@@ -200,6 +241,8 @@ function editPoint(id){
 
   document.querySelector('#fpSheet h3').textContent = 'Правка точки';
   document.getElementById('fpSave').textContent = 'Сохранить изменения';
+  document.getElementById('fpSheet').classList.remove('fpMin');
+  paintGrip();
   openSheet();
 }
 
@@ -248,6 +291,7 @@ async function saveField(){
 
 /* ---------- запуск ---------- */
 function initFieldUI(){
+  buildGrip();
   map.on('click', e => { if(pickMode) setPicked(e.latlng.lat, e.latlng.lng); });
   document.getElementById('fpAdd').addEventListener('click', () => {
     closeSheet(); openSheet();
